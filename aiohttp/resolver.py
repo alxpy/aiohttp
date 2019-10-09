@@ -1,5 +1,6 @@
 import asyncio
 import socket
+import logging
 from typing import Any, Dict, List, Optional
 
 from .abc import AbstractResolver
@@ -15,6 +16,8 @@ except ImportError:  # pragma: no cover
 
 aiodns_default = False
 
+logger = logging.getLogger('aiohttp_resolver')
+
 
 class ThreadedResolver(AbstractResolver):
     """Use Executor for synchronous getaddrinfo() calls, which defaults to
@@ -26,8 +29,12 @@ class ThreadedResolver(AbstractResolver):
 
     async def resolve(self, host: str, port: int=0,
                       family: int=socket.AF_INET) -> List[Dict[str, Any]]:
-        infos = await self._loop.getaddrinfo(
-            host, port, type=socket.SOCK_STREAM, family=family)
+        try:
+            infos = await self._loop.getaddrinfo(
+                host, port, type=socket.SOCK_STREAM, family=family)
+        except:
+            logger.exception('Problem with DNS resolving', extra={'host': host})
+            raise
 
         hosts = []
         for family, _, proto, _, address in infos:
@@ -63,8 +70,13 @@ class AsyncResolver(AbstractResolver):
         try:
             resp = await self._resolver.gethostbyname(host, family)
         except aiodns.error.DNSError as exc:
+            logger.exception('Problem with DNS resolving', extra={'host': host})
             msg = exc.args[1] if len(exc.args) >= 1 else "DNS lookup failed"
             raise OSError(msg) from exc
+        except:
+            logger.exception('Problem with DNS resolving', extra={'host': host})
+            raise
+
         hosts = []
         for address in resp.addresses:
             hosts.append(
